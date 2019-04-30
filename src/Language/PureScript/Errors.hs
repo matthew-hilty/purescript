@@ -45,6 +45,9 @@ import qualified Text.Parsec.Error as PE
 import           Text.Parsec.Error (Message(..))
 import qualified Text.PrettyPrint.Boxes as Box
 
+noErrors :: MultipleErrors
+noErrors = MultipleErrors []
+
 newtype ErrorSuggestion = ErrorSuggestion Text
 
 -- | Get the source span for an error
@@ -109,6 +112,9 @@ errorCode em = case unwrapErrorMessage em of
   InvalidDoBind -> "InvalidDoBind"
   InvalidDoLet -> "InvalidDoLet"
   CycleInDeclaration{} -> "CycleInDeclaration"
+  DictCycleInDeclaration{} -> "DictCycleInDeclaration"
+  MissingEtaExpansion{} -> "MissingEtaExpansion"
+  DictMissingEtaExpansion{} -> "DictMissingEtaExpansion"
   CycleInTypeSynonym{} -> "CycleInTypeSynonym"
   CycleInTypeClassDeclaration{} -> "CycleInTypeClassDeclaration"
   CycleInModules{} -> "CycleInModules"
@@ -563,7 +569,32 @@ prettyPrintSingleError (PPEOptions codeColor full level showDocs relPath) e = fl
             , indent $ line $ displaySourceSpan relPath ss
             ]
     renderSimpleErrorMessage (CycleInDeclaration nm) =
-      line $ "The value of " <> markCode (showIdent nm) <> " is undefined here, so this reference is not allowed."
+      line $ "The value of " <> markCode (showIdent nm) <> " is undefined here because of cyclical dependencies, so this reference is not allowed."
+    renderSimpleErrorMessage (DictCycleInDeclaration i j) =
+      paras [ line $ "A cycle appears in the definitions of type class instance " <> markCode (showIdent i) <> " and member " <> markCode (showIdent j) <> "."
+            , line ""
+            , line $ "The cause may be a reference to another member of " <> markCode (showIdent i) <> " in the definition of " <> markCode (showIdent j) <> "."
+            ]
+    renderSimpleErrorMessage (MissingEtaExpansion ident) =
+      paras [ line $ "A cycle appears in the definition of function " <> markCode (showIdent ident) <> "."
+            , line ""
+            , line "Cycles in functions are discouraged because they might lead to non-terminating runtime behavior. Sometimes, however, cycles may be useful or necessary."
+            , line ""
+            , line $ "Consider substituting the cyclical dependencies in the definition of " <> markCode (showIdent ident) <> " with independent terms."
+            , line ""
+            , line "If the definition cannot be rewritten, eta-expansion is necessary to accommodate purescript's non-strict style of evaluation."
+            ]
+    renderSimpleErrorMessage (DictMissingEtaExpansion i j) =
+      paras [ line $ "A cycle appears in the definitions of type class instance " <> markCode (showIdent i) <> " and member function " <> markCode (showIdent j) <> "."
+            , line ""
+            , line $ "This cycle is due to the implicit dependency on " <> markCode (showIdent i) <> " itself. For example, there may be a reference to another member of " <> markCode (showIdent i) <> " in the definition of " <> markCode (showIdent j) <> "."
+            , line ""
+            , line "Cycles in functions are discouraged because they might lead to non-terminating runtime behavior. Sometimes, however, cycles may be useful or necessary."
+            , line ""
+            , line $ "Consider substituting the cyclical dependencies in the definition of " <> markCode (showIdent j) <> " with independent terms."
+            , line ""
+            , line "If the definition cannot be rewritten, eta-expansion is necessary to accommodate purescript's non-strict style of evaluation."
+            ]
     renderSimpleErrorMessage (CycleInModules mns) =
       case mns of
         [mn] ->
@@ -585,7 +616,7 @@ prettyPrintSingleError (PPEOptions codeColor full level showDocs relPath) e = fl
       paras [ line $ "A cycle appears in a set of type class definitions:"
             , indent $ line $ "{" <> (T.intercalate ", " (map (markCode . runProperName . disqualify) names)) <> "}"
             , line "Cycles are disallowed because they can lead to loops in the type checker."
-            ]  
+            ]
     renderSimpleErrorMessage (NameIsUndefined ident) =
       line $ "Value " <> markCode (showIdent ident) <> " is undefined."
     renderSimpleErrorMessage (UndefinedTypeVariable name) =

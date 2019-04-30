@@ -56,6 +56,12 @@ data SourceSpan = SourceSpan
     -- ^ End of the span
   } deriving (Show, Eq, Ord, Generic)
 
+instance Semigroup SourceSpan where
+  (<>) = widenSourceSpan
+
+instance Monoid SourceSpan where
+  mempty = nullSourceSpan
+
 instance NFData SourceSpan
 
 displayStartEndPos :: SourceSpan -> Text
