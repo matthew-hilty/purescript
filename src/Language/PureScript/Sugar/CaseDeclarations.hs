@@ -369,22 +369,23 @@ toDecls ds@(ValueDecl (ss, _) ident _ bs (result : _) : _) = do
   return [caseDecl]
 toDecls ds = return ds
 
-toTuple :: Declaration -> ([Binder], [GuardedExpr])
-toTuple (ValueDecl _ _ _ bs result) = (bs, result)
+toTuple :: Declaration -> ([Binder], ([GuardedExpr], SourceSpan))
+toTuple (ValueDecl (ss, _) _ _ bs result) = (bs, (result, ss))
 toTuple _ = internalError "Not a value declaration"
 
-makeCaseDeclaration :: forall m. (MonadSupply m) => SourceSpan -> Ident -> [([Binder], [GuardedExpr])] -> m Declaration
+makeCaseDeclaration :: forall m. (MonadSupply m) => SourceSpan -> Ident -> [([Binder], ([GuardedExpr], SourceSpan))] -> m Declaration
 makeCaseDeclaration ss ident alternatives = do
   let namedArgs = map findName . fst <$> alternatives
       argNames = foldl1 resolveNames namedArgs
   args <- if allUnique (catMaybes argNames)
             then mapM argName argNames
             else replicateM (length argNames) freshIdent'
-  let vars = map (Var ss . Qualified Nothing) args
-      binders = [ CaseAlternative bs result | (bs, result) <- alternatives ]
-  let value = foldr (Abs . VarBinder ss) (Case vars binders) args
+  let ss'' = foldMap (\(_, (_, ss')) -> ss') alternatives
+      vars = map (Var ss . Qualified Nothing) args
+      binders = [ CaseAlternative bs result | (bs, (result, _)) <- alternatives ]
+      value = foldr (Abs . VarBinder ss) (Case vars binders) args
 
-  return $ ValueDecl (ss, []) ident Public [] [MkUnguarded value]
+  return $ ValueDecl (ss'', []) ident Public [] [MkUnguarded value]
   where
   -- We will construct a table of potential names.
   -- VarBinders will become Just _ which is a potential name.
